@@ -31,6 +31,12 @@ func ItemWorkflowA(ctx workflow.Context, item orchestrator.ItemA) (string, error
 	err := w.RegisterAndWaitForInstructions(ctx, item)
 	if errors.Is(err, errUnableToProceed) {
 		item.Status = orchestrator.ItemStatusCancelled
+		err = w.SendUpdate(ctx, item)
+		if err != nil {
+			item.Status = orchestrator.ItemStatusFailed
+			logger.Error("Failed to send update signal", "error", err)
+			return "Failed to send update signal", err
+		}
 		logger.Warn("Received 'no-go' signal from orchestrator. Completing workflow without processing.")
 		return "Halted by orchestrator", nil
 	}
@@ -51,6 +57,12 @@ func ItemWorkflowA(ctx workflow.Context, item orchestrator.ItemA) (string, error
 	err = w.StartProcessingAndWaitForInstructions(ctx, item)
 	if errors.Is(err, errUnableToProceed) {
 		item.Status = orchestrator.ItemStatusCancelled
+		err = w.SendUpdate(ctx, item)
+		if err != nil {
+			item.Status = orchestrator.ItemStatusFailed
+			logger.Error("Failed to send update signal", "error", err)
+			return "Failed to send update signal", err
+		}
 		logger.Warn("Received 'no-go' signal from orchestrator. Completing workflow without processing.")
 		return "Processing denied", nil
 	}
@@ -125,6 +137,12 @@ func ItemWorkflowB(ctx workflow.Context, item orchestrator.ItemB) (string, error
 	err := w.RegisterAndWaitForInstructions(ctx, item)
 	if errors.Is(err, errUnableToProceed) {
 		item.Status = orchestrator.ItemStatusCancelled
+		err = w.SendUpdate(ctx, item)
+		if err != nil {
+			item.Status = orchestrator.ItemStatusFailed
+			logger.Error("Failed to send update signal", "error", err)
+			return "Failed to send update signal", err
+		}
 		logger.Warn("Received 'no-go' signal from orchestrator. Completing workflow without processing.")
 		return "Halted by orchestrator", nil
 	}
@@ -144,6 +162,12 @@ func ItemWorkflowB(ctx workflow.Context, item orchestrator.ItemB) (string, error
 	err = w.StartProcessingAndWaitForInstructions(ctx, item)
 	if errors.Is(err, errUnableToProceed) {
 		item.Status = orchestrator.ItemStatusCancelled
+		err = w.SendUpdate(ctx, item)
+		if err != nil {
+			item.Status = orchestrator.ItemStatusFailed
+			logger.Error("Failed to send update signal", "error", err)
+			return "Failed to send update signal", err
+		}
 		logger.Warn("Received 'no-go' signal from orchestrator. Completing workflow without processing.")
 		return "Processing denied", nil
 	}
@@ -302,7 +326,10 @@ func (w ItemWorkflow[T]) Deregister(ctx workflow.Context, item T) error {
 }
 
 func (w ItemWorkflow[T]) SendUpdate(ctx workflow.Context, item T) error {
-	updatePayload := orchestrator.UpdatePayload{Item: item}
+	updatePayload := orchestrator.UpdatePayload{
+		ID:   item.ID(),
+		Item: item,
+	}
 	updateSignal := orchestrator.Signal{
 		Type:    orchestrator.UpdateSignal,
 		Payload: updatePayload,

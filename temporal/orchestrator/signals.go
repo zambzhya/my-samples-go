@@ -49,5 +49,6 @@ type StopProcessingPayload struct {
 }
 
 type UpdatePayload struct {
+	ID   string      `json:"id"`
 	Item interface{} `json:"item,omitempty"`
 }

@@ -39,15 +39,18 @@ func NewItemOrchestrator() ItemOrchestrator {
 }
 
 func (o *ItemOrchestrator) RegisterItem(itemID string, itemWorkflowID string, itemWorkflowRunID string, item interface{}) error {
-	if itemInProgress := o.getItemInProgress(); itemInProgress != nil && itemInProgress.ID != itemID {
-		return anotherItemInProgress
-	}
-	o.Items[itemID] = OrchestratedItem{
+	newItem := OrchestratedItem{
 		ID:                itemID,
 		ItemWorkflowID:    itemWorkflowID,
 		ItemWorkflowRunID: itemWorkflowRunID,
 		Payload:           item,
 	}
+	if itemInProgress := o.getItemInProgress(); itemInProgress != nil && itemInProgress.ID != itemID {
+		newItem.Deregistered = true
+		o.Items[itemID] = newItem
+		return anotherItemInProgress
+	}
+	o.Items[itemID] = newItem
 	return nil
 }
 

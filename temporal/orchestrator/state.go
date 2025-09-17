@@ -95,6 +95,19 @@ func (s *OrchestratorState) HandleSignal(logger tlog.Logger, sig Signal, ctx wor
 			return
 		}
 
+	case UpdateSignal:
+		var p UpdatePayload
+		if err := ConvertPayload(sig.Payload, &p); err != nil {
+			logger.Error("Failed to convert update payload", "error", err)
+			return
+		}
+		logger.Info("Handling update signal", "id", p.ID)
+
+		if err := s.Orchestrator.UpdateItem(p.ID, p.Item); err != nil {
+			logger.Error("Failed to update item", "error", err)
+			return
+		}
+
 	case PingSignal:
 		logger.Info("Handling ping signal")
 	default:
