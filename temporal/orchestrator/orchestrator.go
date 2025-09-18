@@ -1,8 +1,29 @@
 package orchestrator
 
-import "errors"
+import (
+	"errors"
+)
 
-type Orchestrator interface {
+type OrchestratorState struct {
+	SignalsHandled    int
+	OrchestratedItems map[string]OrchestratedItem
+}
+
+func (o *OrchestratorState) IncrementSignalsHandled() {
+	if o != nil {
+		o.SignalsHandled++
+	}
+}
+
+func (o *OrchestratorState) GetSignalsHandled() int {
+	if o == nil {
+		return 0
+	}
+	return o.SignalsHandled
+}
+
+type OrchestratorStateManager interface {
+	GetState() *OrchestratorState
 	RegisterItem(itemID string, itemWorkflowID string, itemWorkflowRunID string, item interface{}) error
 	StartProcessing(itemID string) (*OrchestratedItem, error)
 	StopProcessing(itemID string) (*OrchestratedItem, error)
@@ -11,6 +32,8 @@ type Orchestrator interface {
 	AllItems() map[string]OrchestratedItem
 	RegisteredItems() map[string]OrchestratedItem
 }
+
+type CreateOrchestratorStateManagerFunc[O OrchestratorStateManager] func(state *OrchestratorState) O
 
 type OrchestratedItem struct {
 	ID                string      `json:"id"`
@@ -21,24 +44,41 @@ type OrchestratedItem struct {
 	Payload           interface{} `json:"payload"`
 }
 
-type ItemOrchestrator struct {
-	Items map[string]OrchestratedItem
+type ItemOrchestratorStateManager struct {
+	state *OrchestratorState
 }
 
-var _ Orchestrator = (*ItemOrchestrator)(nil)
+var _ OrchestratorStateManager = (*ItemOrchestratorStateManager)(nil)
 
 var (
 	itemNotRegisteredError = errors.New("item not registered")
 	anotherItemInProgress  = errors.New("another item already in progress")
 )
 
-func NewItemOrchestrator() ItemOrchestrator {
-	return ItemOrchestrator{
-		Items: make(map[string]OrchestratedItem, 0),
+func NewItemOrchestratorStateManager(state *OrchestratorState) OrchestratorStateManager {
+	osm := &ItemOrchestratorStateManager{}
+	if state == nil {
+		osm.state = &OrchestratorState{}
+	} else {
+		osm.state = state
 	}
+	if osm.state.OrchestratedItems == nil {
+		osm.state.OrchestratedItems = make(map[string]OrchestratedItem)
+	}
+	return osm
 }
 
-func (o *ItemOrchestrator) RegisterItem(itemID string, itemWorkflowID string, itemWorkflowRunID string, item interface{}) error {
+func (o *ItemOrchestratorStateManager) GetState() *OrchestratorState {
+	if o == nil {
+		return nil
+	}
+	return o.state
+}
+
+func (o *ItemOrchestratorStateManager) RegisterItem(itemID string, itemWorkflowID string, itemWorkflowRunID string, item interface{}) error {
+	if o == nil {
+		return errors.New("orchestrator state manager is nil")
+	}
 	newItem := OrchestratedItem{
 		ID:                itemID,
 		ItemWorkflowID:    itemWorkflowID,
@@ -47,63 +87,81 @@ func (o *ItemOrchestrator) RegisterItem(itemID string, itemWorkflowID string, it
 	}
 	if itemInProgress := o.getItemInProgress(); itemInProgress != nil && itemInProgress.ID != itemID {
 		newItem.Deregistered = true
-		o.Items[itemID] = newItem
+		o.state.OrchestratedItems[itemID] = newItem
 		return anotherItemInProgress
 	}
-	o.Items[itemID] = newItem
+	o.state.OrchestratedItems[itemID] = newItem
 	return nil
 }
 
-func (o *ItemOrchestrator) StartProcessing(itemID string) (*OrchestratedItem, error) {
-	if item, exists := o.Items[itemID]; exists {
+func (o *ItemOrchestratorStateManager) StartProcessing(itemID string) (*OrchestratedItem, error) {
+	if o == nil {
+		return nil, errors.New("orchestrator state manager is nil")
+	}
+	if item, exists := o.state.OrchestratedItems[itemID]; exists {
 		if itemInProgress := o.getItemInProgress(); itemInProgress != nil && itemInProgress.ID != itemID {
 			return &item, anotherItemInProgress
 		}
 		item.InProgress = true
-		o.Items[itemID] = item
+		o.state.OrchestratedItems[itemID] = item
 		return &item, nil
 	} else {
 		return nil, itemNotRegisteredError
 	}
 }
 
-func (o *ItemOrchestrator) StopProcessing(itemID string) (*OrchestratedItem, error) {
-	if item, exists := o.Items[itemID]; exists {
+func (o *ItemOrchestratorStateManager) StopProcessing(itemID string) (*OrchestratedItem, error) {
+	if o == nil {
+		return nil, errors.New("orchestrator state manager is nil")
+	}
+	if item, exists := o.state.OrchestratedItems[itemID]; exists {
 		item.InProgress = false
-		o.Items[itemID] = item
+		o.state.OrchestratedItems[itemID] = item
 		return &item, nil
 	} else {
 		return nil, itemNotRegisteredError
 	}
 }
 
-func (o *ItemOrchestrator) UpdateItem(itemID string, item interface{}) error {
-	if existingItem, exists := o.Items[itemID]; exists {
+func (o *ItemOrchestratorStateManager) UpdateItem(itemID string, item interface{}) error {
+	if o == nil {
+		return errors.New("orchestrator state manager is nil")
+	}
+	if existingItem, exists := o.state.OrchestratedItems[itemID]; exists {
 		existingItem.Payload = item
-		o.Items[itemID] = existingItem
+		o.state.OrchestratedItems[itemID] = existingItem
 	} else {
 		return itemNotRegisteredError
 	}
 	return nil
 }
 
-func (o *ItemOrchestrator) Deregister(itemID string) error {
-	if item, exists := o.Items[itemID]; exists {
+func (o *ItemOrchestratorStateManager) Deregister(itemID string) error {
+	if o == nil {
+		return errors.New("orchestrator state manager is nil")
+	}
+	if item, exists := o.state.OrchestratedItems[itemID]; exists {
 		item.Deregistered = true
-		o.Items[itemID] = item
+		o.state.OrchestratedItems[itemID] = item
 	} else {
 		return itemNotRegisteredError
 	}
 	return nil
 }
 
-func (o *ItemOrchestrator) AllItems() map[string]OrchestratedItem {
-	return o.Items
+func (o *ItemOrchestratorStateManager) AllItems() map[string]OrchestratedItem {
+	if o == nil {
+		return nil
+	}
+	return o.state.OrchestratedItems
 }
 
-func (o *ItemOrchestrator) RegisteredItems() map[string]OrchestratedItem {
+func (o *ItemOrchestratorStateManager) RegisteredItems() map[string]OrchestratedItem {
+	if o == nil {
+		return nil
+	}
 	registered := make(map[string]OrchestratedItem)
-	for id, item := range o.Items {
+	for id, item := range o.state.OrchestratedItems {
 		if !item.Deregistered {
 			registered[id] = item
 		}
@@ -111,8 +169,11 @@ func (o *ItemOrchestrator) RegisteredItems() map[string]OrchestratedItem {
 	return registered
 }
 
-func (o *ItemOrchestrator) getItemInProgress() *OrchestratedItem {
-	for _, item := range o.Items {
+func (o *ItemOrchestratorStateManager) getItemInProgress() *OrchestratedItem {
+	if o == nil {
+		return nil
+	}
+	for _, item := range o.state.OrchestratedItems {
 		if item.InProgress && !item.Deregistered {
 			return &item
 		}

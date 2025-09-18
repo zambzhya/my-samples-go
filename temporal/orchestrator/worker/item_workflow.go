@@ -144,7 +144,7 @@ func ItemWorkflowB(ctx workflow.Context, item orchestrator.ItemB) (string, error
 			return "Failed to send update signal", err
 		}
 		logger.Warn("Received 'no-go' signal from orchestrator. Completing workflow without processing.")
-		return "Halted by orchestrator", nil
+		return "Halted by orchestrator", errors.New("Unable to register. Halted by orchestrator.")
 	}
 	if err != nil {
 		item.Status = orchestrator.ItemStatusFailed
@@ -169,7 +169,7 @@ func ItemWorkflowB(ctx workflow.Context, item orchestrator.ItemB) (string, error
 			return "Failed to send update signal", err
 		}
 		logger.Warn("Received 'no-go' signal from orchestrator. Completing workflow without processing.")
-		return "Processing denied", nil
+		return "Processing denied", errors.New("Unable to process. Processing denied by orchestrator.")
 	}
 	if err != nil {
 		item.Status = orchestrator.ItemStatusFailed

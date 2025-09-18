@@ -102,9 +102,7 @@ func ensureOrchestratorRunning(ctx context.Context, c client.Client) {
 		orchestrator.Signal{Type: orchestrator.PingSignal},
 		options,
 		orchestrator.OrchestratorWorkflowName,
-		orchestrator.OrchestratorState{
-			Orchestrator: orchestrator.NewItemOrchestrator(),
-		})
+		orchestrator.OrchestratorState{})
 	if err != nil {
 		log.Fatalln("Unable to signal/start orchestrator workflow", err)
 	} else {
